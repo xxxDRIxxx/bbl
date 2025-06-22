@@ -21,11 +21,16 @@ st.markdown("""
 
 st.title("🏀 BBL Scoring System (Dynamic Roster + Tally Buttons)")
 
+# Admin sets number of players per team
+st.sidebar.title("⚙️ Game Settings")
+num_players_team_a = st.sidebar.number_input("Number of Players - Team A", min_value=1, max_value=20, value=5)
+num_players_team_b = st.sidebar.number_input("Number of Players - Team B", min_value=1, max_value=20, value=5)
+
 # Team toggle
 team_selection = st.radio("Select Team", ["Team A", "Team B"], horizontal=True)
 
-# Admin input: number of players
-num_players = st.number_input("🔢 How many players for each team?", min_value=1, max_value=20, value=5, step=1)
+# Select number of players for current team
+num_players = num_players_team_a if team_selection == "Team A" else num_players_team_b
 
 # Session key per team
 team_key = f"player_stats_{team_selection}"
