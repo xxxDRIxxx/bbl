@@ -1,68 +1,56 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Basketball Scoring System", layout="wide")
+st.set_page_config(page_title="🏀 Official Basketball Scoring Sheet", layout="wide")
 
-# Load data
+# Load the official scoresheet template
 @st.cache_data
-def load_data():
-    df = pd.read_excel("data/BBL_Statssheet.xlsx", sheet_name="SLvsBS JUN 21")
-    df.columns = df.columns.str.strip()  # Clean up column names
+def load_template():
+    df = pd.read_excel("data/BBL_Statssheet.xlsx", sheet_name="score sheet OFFICIAL")
+    df.columns = df.columns.str.strip()  # Clean column names
     return df
 
-df = load_data()
+df = load_template()
 
-st.title("🏀 Basketball Player Scoring System")
-st.markdown("Explore player statistics from the uploaded game data.")
+st.title("🏀 Official Basketball Scoring System")
+st.markdown("Use this form to fill in or edit live stats from the official score sheet.")
 
-# Show column names for debugging
-st.write("🔍 Column names:", df.columns.tolist())
-
-# Attempt to find the correct player name column
-player_col = None
-for col in df.columns:
-    if "player" in col.lower():
-        player_col = col
-        break
-
+# Clean player names
+player_col = next((col for col in df.columns if "player" in col.lower()), None)
 if player_col:
     df[player_col] = df[player_col].fillna(method="ffill")
 else:
-    st.error("❌ Could not find a 'Player Name' column.")
+    st.error("❌ Could not detect a 'Player Name' column.")
     st.stop()
 
-# Drop completely empty rows
+# Drop fully blank rows
 df.dropna(how="all", inplace=True)
 
-# Display raw data
-with st.expander("🔍 Show Raw Data"):
-    st.dataframe(df)
+# Let user edit the full sheet
+st.markdown("### ✏️ Edit Player Stats")
+editable_df = st.data_editor(
+    df,
+    use_container_width=True,
+    num_rows="dynamic",
+    key="official_editor"
+)
 
-# Team selection
-if "Team Name" in df.columns:
-    teams = df["Team Name"].dropna().unique()
-    selected_team = st.selectbox("Select Team", options=teams)
+# Extract numeric columns to summarize
+numeric_cols = ['FT made', '2PTM', '3PTM', 'Assist', 'TO']
+numeric_cols = [col for col in numeric_cols if col in editable_df.columns]
 
-    team_df = df[df["Team Name"] == selected_team]
+if numeric_cols:
+    st.markdown("### 📊 Team Totals")
+    team_totals = editable_df[numeric_cols].sum(numeric_only=True).to_frame(name="Total")
+    st.table(team_totals)
 
-    st.subheader(f"📋 Player Stats for {selected_team}")
-    st.dataframe(team_df)
+# Best Player selection
+player_names = editable_df[player_col].dropna().unique().tolist()
 
-    # Select only numeric columns that exist
-    possible_numeric = ['FT made', '2PTM', '3PTM', 'Assist', 'TO', 'FOULS']
-    numeric_cols = [col for col in possible_numeric if col in team_df.columns]
-    if numeric_cols:
-        agg_df = team_df[numeric_cols].sum(numeric_only=True).to_frame(name="Total")
-        st.subheader("📊 Team Totals")
-        st.table(agg_df)
+st.markdown("### 🏅 Player Awards")
+best_player = st.selectbox("🏆 Best Player", options=player_names)
+def_player = st.selectbox("🛡️ Defensive Player", options=player_names)
 
-    # Best & Defensive Player
-    best = team_df.get('Best Player', pd.Series()).dropna().unique()
-    defensive = team_df.get('Defensive Player', pd.Series()).dropna().unique()
-
-    if len(best):
-        st.success(f"🏆 **Best Player:** {', '.join(best)}")
-    if len(defensive):
-        st.info(f"🛡️ **Defensive Player:** {', '.join(defensive)}")
-else:
-    st.error("❌ 'Team Name' column not found in the data.")
+# Show selections
+st.success(f"🏆 Best Player: {best_player}")
+st.info(f"🛡️ Defensive Player: {def_player}")
