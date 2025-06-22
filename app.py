@@ -1,80 +1,83 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="🏀 Official BBL Scoring App", layout="wide")
+st.set_page_config(page_title="🏀 BBL Official Scoring App", layout="wide")
 
-@st.cache_data
-def load_template():
-    df = pd.read_excel("data/BBL_Statssheet.xlsx", sheet_name="score sheet OFFICIAL")
-    df.columns = df.columns.str.strip()
-    return df
+st.title("🏀 BBL Scoring System (Dynamic Roster + Tally Buttons)")
 
-df = load_template()
+# Admin input: number of players
+num_players = st.number_input("🔢 How many players will you input?", min_value=1, max_value=20, value=5, step=1)
 
-# Identify key columns
-player_col = next((col for col in df.columns if "player" in col.lower()), None)
-team_col = next((col for col in df.columns if "team" in col.lower()), None)
+# Initialize session state
+if "player_stats" not in st.session_state:
+    st.session_state.player_stats = [
+        {
+            "Player": f"Player {i+1}",
+            "FT made": 0,
+            "2PTM": 0,
+            "3PTM": 0,
+            "Assist": 0,
+            "TO": 0,
+            "FOULS": 0,
+        } for i in range(num_players)
+    ]
+else:
+    # Adjust if player count is changed
+    current_count = len(st.session_state.player_stats)
+    if num_players > current_count:
+        for i in range(current_count, num_players):
+            st.session_state.player_stats.append({
+                "Player": f"Player {i+1}",
+                "FT made": 0,
+                "2PTM": 0,
+                "3PTM": 0,
+                "Assist": 0,
+                "TO": 0,
+                "FOULS": 0,
+            })
+    elif num_players < current_count:
+        st.session_state.player_stats = st.session_state.player_stats[:num_players]
 
-df[player_col] = df[player_col].fillna(method="ffill")
-df.dropna(how="all", inplace=True)
+# Utility to handle increment/decrement
+def score_button(col, label, key, delta=1):
+    if col.button(label, key=key):
+        return delta
+    return 0
 
-st.title("🏀 BBL Scoring System (Official Form-Based)")
-st.markdown("Use this interface to enter player stats using arrows and dropdowns.")
+st.markdown("### ✍️ Player Stats (Click + or - to Tally)")
 
-# Filter players
-player_df = df[df[player_col].notna() & df[player_col].str.lower().str.startswith("p")]
+updated_stats = []
 
-# Utility to safely convert input to int
-def safe_int(val):
-    try:
-        return int(pd.to_numeric(val, errors="coerce") or 0)
-    except:
-        return 0
+for i, stats in enumerate(st.session_state.player_stats):
+    st.markdown(f"#### 🧍 {stats['Player']}")
+    col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 2, 2, 2, 2, 2, 2])
 
-edited_data = []
+    for stat, col in zip(["FT made", "2PTM", "3PTM", "Assist", "TO", "FOULS"],
+                         [col1, col2, col3, col4, col5, col6]):
+        col.markdown(f"**{stat}**")
+        cols = col.columns(3)
+        stats[stat] += score_button(cols[0], "➖", key=f"{stat}_minus_{i}", delta=-1)
+        cols[1].write(stats[stat])
+        stats[stat] += score_button(cols[2], "➕", key=f"{stat}_plus_{i}", delta=1)
 
-st.markdown("### ✍️ Player Statistics Entry")
-for idx, row in player_df.iterrows():
-    st.markdown(f"#### Player: {row[player_col]}")
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # Player name editable
+    stats["Player"] = col7.text_input("Name", value=stats["Player"], key=f"name_{i}")
+    updated_stats.append(stats)
 
-    ft = col1.number_input("FT made", min_value=0, value=safe_int(row.get("FT made")), key=f"ft_{idx}")
-    twopt = col2.number_input("2PTM", min_value=0, value=safe_int(row.get("2PTM")), key=f"2pt_{idx}")
-    threept = col3.number_input("3PTM", min_value=0, value=safe_int(row.get("3PTM")), key=f"3pt_{idx}")
-    assists = col4.number_input("Assist", min_value=0, value=safe_int(row.get("Assist")), key=f"ast_{idx}")
-    to = col5.number_input("TO", min_value=0, value=safe_int(row.get("TO")), key=f"to_{idx}")
-    fouls = col6.number_input("FOULS", min_value=0, value=safe_int(row.get("FOULS")), key=f"fouls_{idx}")
-
-    edited_data.append({
-        "#": row.get("#", ""),
-        player_col: row[player_col],
-        "FT made": ft,
-        "2PTM": twopt,
-        "3PTM": threept,
-        "Assist": assists,
-        "TO": to,
-        "FOULS": fouls,
-        "Team Name": row.get("Team Name", "")
-    })
-
-# Final stats DataFrame
-result_df = pd.DataFrame(edited_data)
-
-st.markdown("## 📊 Live Scoring Table")
+# Show final table
+result_df = pd.DataFrame(updated_stats)
+st.markdown("## 📊 Live Player Scoring Table")
 st.dataframe(result_df, use_container_width=True)
 
-if team_col and "FT made" in result_df.columns:
-    st.markdown("## 🧮 Team Totals")
-    team_scores = result_df.groupby("Team Name")[["FT made", "2PTM", "3PTM", "Assist", "TO", "FOULS"]].sum()
-    st.dataframe(team_scores)
+# Team summary
+st.markdown("## 📈 Team Totals")
+team_totals = result_df[["FT made", "2PTM", "3PTM", "Assist", "TO", "FOULS"]].sum().to_frame(name="Total")
+st.table(team_totals)
 
-# Best/Defensive Player
-player_names = result_df[player_col].dropna().unique().tolist()
-
+# Award selection
 st.markdown("## 🏅 Awards")
-col1, col2 = st.columns(2)
-best = col1.selectbox("🏆 Best Player", options=player_names)
-defensive = col2.selectbox("🛡️ Defensive Player", options=player_names)
+best = st.selectbox("🏆 Best Player", options=result_df["Player"])
+defensive = st.selectbox("🛡️ Defensive Player", options=result_df["Player"])
 
-st.success(f"**🏆 Best Player:** {best}")
-st.info(f"**🛡️ Defensive Player:** {defensive}")
+st.success(f"🏆 Best Player: {best}")
+st.info(f"🛡️ Defensive Player: {defensive}")
