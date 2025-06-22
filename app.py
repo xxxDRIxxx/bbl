@@ -1,56 +1,79 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="🏀 Official Basketball Scoring Sheet", layout="wide")
+st.set_page_config(page_title="🏀 Official BBL Scoring App", layout="wide")
 
-# Load the official scoresheet template
 @st.cache_data
 def load_template():
     df = pd.read_excel("data/BBL_Statssheet.xlsx", sheet_name="score sheet OFFICIAL")
-    df.columns = df.columns.str.strip()  # Clean column names
+    df.columns = df.columns.str.strip()
     return df
 
 df = load_template()
 
-st.title("🏀 Official Basketball Scoring System")
-st.markdown("Use this form to fill in or edit live stats from the official score sheet.")
-
-# Clean player names
+# Identify key columns
 player_col = next((col for col in df.columns if "player" in col.lower()), None)
-if player_col:
-    df[player_col] = df[player_col].fillna(method="ffill")
-else:
-    st.error("❌ Could not detect a 'Player Name' column.")
-    st.stop()
+team_col = next((col for col in df.columns if "team" in col.lower()), None)
 
-# Drop fully blank rows
+# Clean missing player names
+df[player_col] = df[player_col].fillna(method="ffill")
+
+# Drop blank rows
 df.dropna(how="all", inplace=True)
 
-# Let user edit the full sheet
-st.markdown("### ✏️ Edit Player Stats")
-editable_df = st.data_editor(
-    df,
-    use_container_width=True,
-    num_rows="dynamic",
-    key="official_editor"
-)
+st.title("🏀 BBL Scoring System (Official Form-Based)")
 
-# Extract numeric columns to summarize
-numeric_cols = ['FT made', '2PTM', '3PTM', 'Assist', 'TO']
-numeric_cols = [col for col in numeric_cols if col in editable_df.columns]
+st.markdown("Use this interface to enter player stats using arrows and dropdowns.")
 
-if numeric_cols:
-    st.markdown("### 📊 Team Totals")
-    team_totals = editable_df[numeric_cols].sum(numeric_only=True).to_frame(name="Total")
-    st.table(team_totals)
+# Filter rows with actual players
+player_df = df[df[player_col].notna() & df[player_col].str.lower().str.startswith("p")]
 
-# Best Player selection
-player_names = editable_df[player_col].dropna().unique().tolist()
+edited_data = []
 
-st.markdown("### 🏅 Player Awards")
-best_player = st.selectbox("🏆 Best Player", options=player_names)
-def_player = st.selectbox("🛡️ Defensive Player", options=player_names)
+st.markdown("### ✍️ Player Statistics Entry")
+for idx, row in player_df.iterrows():
+    st.markdown(f"#### Player: {row[player_col]}")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-# Show selections
-st.success(f"🏆 Best Player: {best_player}")
-st.info(f"🛡️ Defensive Player: {def_player}")
+    ft = col1.number_input("FT made", min_value=0, value=int(row.get("FT made", 0)), key=f"ft_{idx}")
+    twopt = col2.number_input("2PTM", min_value=0, value=int(row.get("2PTM", 0)), key=f"2pt_{idx}")
+    threept = col3.number_input("3PTM", min_value=0, value=int(row.get("3PTM", 0)), key=f"3pt_{idx}")
+    assists = col4.number_input("Assist", min_value=0, value=int(row.get("Assist", 0)), key=f"ast_{idx}")
+    to = col5.number_input("TO", min_value=0, value=int(row.get("TO", 0)), key=f"to_{idx}")
+    fouls = col6.number_input("FOULS", min_value=0, value=int(row.get("FOULS", 0)), key=f"fouls_{idx}")
+
+    edited_data.append({
+        "#": row.get("#", ""),
+        player_col: row[player_col],
+        "FT made": ft,
+        "2PTM": twopt,
+        "3PTM": threept,
+        "Assist": assists,
+        "TO": to,
+        "FOULS": fouls,
+        "Team Name": row.get("Team Name", "")
+    })
+
+# Convert to DataFrame
+result_df = pd.DataFrame(edited_data)
+
+# Show updated results
+st.markdown("## 📊 Live Scoring Table")
+st.dataframe(result_df, use_container_width=True)
+
+# Team total summary
+if team_col and "FT made" in result_df.columns:
+    st.markdown("## 🧮 Team Totals")
+    team_scores = result_df.groupby("Team Name")[["FT made", "2PTM", "3PTM", "Assist", "TO", "FOULS"]].sum()
+    st.dataframe(team_scores)
+
+# Best/Defensive Player
+player_names = result_df[player_col].dropna().unique().tolist()
+
+st.markdown("## 🏅 Awards")
+col1, col2 = st.columns(2)
+best = col1.selectbox("🏆 Best Player", options=player_names)
+defensive = col2.selectbox("🛡️ Defensive Player", options=player_names)
+
+st.success(f"**🏆 Best Player:** {best}")
+st.info(f"**🛡️ Defensive Player:** {defensive}")
