@@ -10,8 +10,12 @@ num_players = st.number_input("🔢 How many players will you input?", min_value
 
 # Initialize session state
 if "player_stats" not in st.session_state:
-    st.session_state.player_stats = [
-        {
+    st.session_state.player_stats = []
+
+# Adjust session state based on number of players
+if len(st.session_state.player_stats) < num_players:
+    for i in range(len(st.session_state.player_stats), num_players):
+        st.session_state.player_stats.append({
             "Player": f"Player {i+1}",
             "FT made": 0,
             "2PTM": 0,
@@ -19,24 +23,9 @@ if "player_stats" not in st.session_state:
             "Assist": 0,
             "TO": 0,
             "FOULS": 0,
-        } for i in range(num_players)
-    ]
-else:
-    # Adjust if player count is changed
-    current_count = len(st.session_state.player_stats)
-    if num_players > current_count:
-        for i in range(current_count, num_players):
-            st.session_state.player_stats.append({
-                "Player": f"Player {i+1}",
-                "FT made": 0,
-                "2PTM": 0,
-                "3PTM": 0,
-                "Assist": 0,
-                "TO": 0,
-                "FOULS": 0,
-            })
-    elif num_players < current_count:
-        st.session_state.player_stats = st.session_state.player_stats[:num_players]
+        })
+elif len(st.session_state.player_stats) > num_players:
+    st.session_state.player_stats = st.session_state.player_stats[:num_players]
 
 # Utility to handle increment/decrement
 def score_button(col, label, key, delta=1):
@@ -57,7 +46,7 @@ for i, stats in enumerate(st.session_state.player_stats):
         col.markdown(f"**{stat}**")
         cols = col.columns(3)
         stats[stat] += score_button(cols[0], "➖", key=f"{stat}_minus_{i}", delta=-1)
-        cols[1].write(stats[stat])
+        cols[1].markdown(f"<h5 style='text-align: center;'>{stats[stat]}</h5>", unsafe_allow_html=True)
         stats[stat] += score_button(cols[2], "➕", key=f"{stat}_plus_{i}", delta=1)
 
     # Player name editable
